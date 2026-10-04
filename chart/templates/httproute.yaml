@@ -16,6 +16,10 @@
 # own, so the gateway has to speak HTTPS to the backend without verifying it.
 # Gateway API's BackendTLSPolicy can't express "skip verification"; Envoy
 # Gateway's Backend resource can.
+#
+# ALPN is pinned (gateway.backendAlpnProtocols, default http/1.1) because
+# Envoy Gateway 1.6+ otherwise offers h2, UOS's nginx accepts it, and the web
+# UI's WebSocket (/api/ws/system) cannot upgrade over HTTP/2.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: Backend
 metadata:
@@ -30,6 +34,10 @@ spec:
         port: {{ .Values.ports.webui.port }}
   tls:
     insecureSkipVerify: true
+    {{- with .Values.gateway.backendAlpnProtocols }}
+    alpnProtocols:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

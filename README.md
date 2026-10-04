@@ -183,6 +183,12 @@ comes from the Gateway listener. Device ports (8080, 3478, 10003) are not
 routed through the gateway; expose those with `service.type: LoadBalancer`.
 See [`examples/values-gateway.yaml`](examples/values-gateway.yaml).
 
+The Backend pins the upstream connection to HTTP/1.1
+(`gateway.backendAlpnProtocols`). Envoy Gateway 1.6+ otherwise negotiates
+HTTP/2 with UOS, which breaks the web UI's WebSocket and leaves the console
+blank. The field requires Envoy Gateway 1.6 or later; set it to `[]` to omit
+it on older versions.
+
 ## TLS via cert-manager
 
 If you run cert-manager in your cluster, the chart can issue and rotate the

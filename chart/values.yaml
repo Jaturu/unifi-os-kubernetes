@@ -212,6 +212,14 @@ gateway:
   #   namespace: envoy-gateway-system
   #   sectionName: https
   annotations: {}
+  # ALPN protocols Envoy offers to UOS on the backend TLS connection. Envoy
+  # Gateway 1.6+ defaults to [h2, http/1.1]; UOS's nginx then selects HTTP/2,
+  # which cannot carry the WebSocket upgrade the web UI needs (/api/ws/system),
+  # and the console renders a blank page. Keep this at http/1.1 unless you
+  # know the backend handles WebSockets over HTTP/2. The field requires Envoy
+  # Gateway 1.6 or later; set to [] to omit it on older versions.
+  backendAlpnProtocols:
+    - http/1.1
 
 # Optional cert-manager Certificate for the ingress TLS secret. When enabled,
 # cert-manager issues and rotates a cert into <fullname>-tls (or
