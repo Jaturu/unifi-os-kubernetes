@@ -6,7 +6,12 @@ systemIp: unifi.example.com
 service:
   type: LoadBalancer
   loadBalancerIP: 192.0.2.10
-  externalTrafficPolicy: Local
+  # One Service is created per port, all requesting the same IP. MetalLB
+  # only lets them share it when they carry the same sharing key, and
+  # shared-IP services need externalTrafficPolicy: Cluster.
+  annotations:
+    metallb.universe.tf/allow-shared-ip: unifi
+  externalTrafficPolicy: Cluster
 
 ports:
   webui:        { enabled: true,  port: 443,   targetPort: 443,   protocol: TCP }

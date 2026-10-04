@@ -4,7 +4,7 @@
 
 services:
   unifi-os-server:
-    image: ghcr.io/chrissnell/unifi-os-server:latest
+    image: ghcr.io/jaturu/unifi-os-server:latest
     container_name: unifi-os-server
     cgroup: host
     cap_add:

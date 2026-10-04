@@ -28,7 +28,6 @@ concurrency:
 permissions:
   contents: write
   packages: read
-  pages: write
 
 jobs:
   release:
@@ -36,7 +35,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -46,7 +45,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -61,7 +60,8 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          REPO="${REGISTRY}/${IMAGE}"
+          # Registry refs must be lowercase; the owner login may not be.
+          REPO="${REGISTRY}/${IMAGE,,}"
           APPVER=$(awk -F'"' '/^appVersion:/ {print $2}' chart/Chart.yaml)
           SHORT_SHA="${SHA:0:7}"
           SHA_REF="${REPO}:sha-${SHORT_SHA}"
@@ -73,16 +73,19 @@ jobs:
 
           # Is build-image.yaml (re)building the app image for THIS commit? It
           # runs on the same push whenever docker/ or its own workflow changes.
-          # On a push we can tell from the diff; on workflow_dispatch (no BEFORE)
-          # or a force-push that rewrote BEFORE we can't, so we treat it as
-          # changed and require the exact per-commit image rather than trusting
-          # a mutable tag that might still be mid-rebuild.
+          # On a push we can tell from the diff; after a force-push that rewrote
+          # BEFORE we can't, so we treat it as changed and require the exact
+          # per-commit image rather than trusting a mutable tag that might
+          # still be mid-rebuild.
           IMAGE_CHANGED=1
-          if [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
-            # workflow_dispatch: no prior ref. The image (if any) is already
-            # built; don't hard-wait — probe the per-commit tag, else appVersion.
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] \
+             || [ -z "${BEFORE}" ] \
+             || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+            # workflow_dispatch (no `before` in the event payload) or no prior
+            # ref. The image (if any) is already built; don't hard-wait —
+            # probe the per-commit tag, else appVersion.
             IMAGE_CHANGED=0
-          elif [ -n "${BEFORE}" ]; then
+          else
             if CHANGED="$(git diff --name-only "${BEFORE}" "${SHA}" \
                  -- docker/ .github/workflows/build-image.yaml 2>/dev/null)"; then
               [ -n "${CHANGED}" ] || IMAGE_CHANGED=0
@@ -137,12 +140,12 @@ jobs:
           grep -n '^  digest:' chart/values.yaml
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v3.16.2
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
+        uses: helm/chart-releaser-action@a917fd15b20e8b64b94d9158ad54cd6345335584 # v1.6.0
         with:
           charts_dir: .
           config: .github/cr.yaml

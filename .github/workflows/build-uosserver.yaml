@@ -19,7 +19,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  REPO_OWNER: ${{ github.repository_owner }}
   IMAGE_NAME: uosserver
 
 jobs:
@@ -30,18 +29,30 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Validate tag and lowercase owner
+        id: prep
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}$ ]]; then
+            echo "::error::Unexpected uosserver tag: $TAG"
+            exit 1
+          fi
+          # Registry refs must be lowercase; the owner login may not be.
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge and push multi-arch manifest
-        uses: int128/docker-manifest-create-action@v2
+        uses: int128/docker-manifest-create-action@a118e9fe12455375d4810aa318c20e6dba77288e # v2.29.0
         with:
           tags: |
-            ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}-multiarch
+            ${{ env.REGISTRY }}/${{ steps.prep.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}-multiarch
           sources: |
-            ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}-linux-amd64
-            ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}-linux-arm64
+            ${{ env.REGISTRY }}/${{ steps.prep.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}-linux-amd64
+            ${{ env.REGISTRY }}/${{ steps.prep.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}-linux-arm64

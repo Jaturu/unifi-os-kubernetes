@@ -11,7 +11,11 @@ Image: {{ include "unifi-os-server.image" . }}
     kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -f
 
 Web UI:
-{{- if .Values.ingress.enabled }}
+{{- if .Values.gateway.enabled }}
+{{- range .Values.gateway.hostnames }}
+  https://{{ . }}/
+{{- end }}
+{{- else if .Values.ingress.enabled }}
   https://{{ .Values.ingress.host }}{{ .Values.ingress.path }}
 {{- else if eq .Values.service.type "LoadBalancer" }}
   Once the LoadBalancer is provisioned, browse to https://<external-ip>/

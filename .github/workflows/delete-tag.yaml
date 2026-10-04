@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Delete container tag
-        uses: rafalkk/remove-dockertag-action@v1
+        uses: rafalkk/remove-dockertag-action@581f14f26a4a127cbe4145f7584975483a58b4e8 # v1.0.1
         with:
           image_name: ${{ inputs.package }}
           tag_name: ${{ inputs.tag }}

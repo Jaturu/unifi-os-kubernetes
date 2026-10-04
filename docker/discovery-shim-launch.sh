@@ -17,6 +17,7 @@ SHIM=/usr/local/lib/uos-discovery-shim/shim.js
 
 # PATH resolution (`node`) and DISCOVERY_SHIM_NODE do the real work; the
 # unifi-core paths below are best-effort fallbacks, not confirmed locations.
+node_path=""
 for candidate in \
     "${DISCOVERY_SHIM_NODE:-}" \
     node \
@@ -26,12 +27,18 @@ for candidate in \
     /usr/lib/unifi-core/node
 do
     [ -n "$candidate" ] || continue
-    node_path="$(command -v "$candidate" 2>/dev/null || true)"
-    [ -n "$node_path" ] && [ -x "$node_path" ] || continue
-    echo "uos-discovery-shim: using node at $node_path"
-    exec "$node_path" "$SHIM"
+    found="$(command -v "$candidate" 2>/dev/null || true)"
+    if [ -n "$found" ] && [ -x "$found" ]; then
+        node_path="$found"
+        break
+    fi
 done
 
-echo "uos-discovery-shim: no node runtime found; discovery shim disabled." >&2
-echo "uos-discovery-shim: unifi-core discovery polls will log harmless ECONNREFUSED noise." >&2
-exit 0
+if [ -z "$node_path" ]; then
+    echo "uos-discovery-shim: no node runtime found; discovery shim disabled." >&2
+    echo "uos-discovery-shim: unifi-core discovery polls will log harmless ECONNREFUSED noise." >&2
+    exit 0
+fi
+
+echo "uos-discovery-shim: using node at $node_path"
+exec "$node_path" "$SHIM"

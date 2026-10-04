@@ -3,8 +3,12 @@
 Self-hosted **UniFi OS Server** on Docker and Kubernetes — built end-to-end
 from the official Ubiquiti installer, with no third-party base images.
 
-[![Build status](https://github.com/chrissnell/unifi-os-kubernetes/actions/workflows/build-image.yaml/badge.svg)](https://github.com/chrissnell/unifi-os-kubernetes/actions/workflows/build-image.yaml)
-[![Release check](https://github.com/chrissnell/unifi-os-kubernetes/actions/workflows/release-check.yaml/badge.svg)](https://github.com/chrissnell/unifi-os-kubernetes/actions/workflows/release-check.yaml)
+[![Build status](https://github.com/Jaturu/unifi-os-kubernetes/actions/workflows/build-image.yaml/badge.svg)](https://github.com/Jaturu/unifi-os-kubernetes/actions/workflows/build-image.yaml)
+[![Release check](https://github.com/Jaturu/unifi-os-kubernetes/actions/workflows/release-check.yaml/badge.svg)](https://github.com/Jaturu/unifi-os-kubernetes/actions/workflows/release-check.yaml)
+
+> Personal fork of [chrissnell/unifi-os-kubernetes](https://github.com/chrissnell/unifi-os-kubernetes).
+> Images are built by this repo's own workflows and published under
+> `ghcr.io/jaturu`.
 
 ## What this is
 
@@ -18,10 +22,10 @@ that drops a Podman image on the host. This repository:
 
 1. Polls Ubiquiti's official firmware API daily and detects new releases.
 2. Runs the official installer on a GitHub-hosted runner, extracts the
-   Podman image, and re-publishes it as `ghcr.io/chrissnell/uosserver` for
+   Podman image, and re-publishes it as `ghcr.io/jaturu/uosserver` for
    both `linux/amd64` and `linux/arm64`.
 3. Layers a small entrypoint on top to produce a runnable
-   `ghcr.io/chrissnell/unifi-os-server` image.
+   `ghcr.io/jaturu/unifi-os-server` image.
 4. Ships a clean, configurable **Helm chart** for running it in Kubernetes.
 
 The image and chart are unaffiliated with Ubiquiti. UOS itself remains
@@ -54,7 +58,7 @@ docker run -d --name unifi-os-server \
   -v unifi-mongo:/var/lib/mongodb \
   -v unifi-log:/var/log \
   -p 11443:443 -p 8080:8080 -p 3478:3478/udp -p 10003:10003/udp \
-  ghcr.io/chrissnell/unifi-os-server:latest
+  ghcr.io/jaturu/unifi-os-server:latest
 ```
 
 See [`docker/docker-compose.yaml`](docker/docker-compose.yaml) for a
@@ -63,7 +67,7 @@ fully-annotated reference.
 ## Quick start (Helm)
 
 ```bash
-helm repo add unifi-os https://chrissnell.github.io/unifi-os-kubernetes
+helm repo add unifi-os https://jaturu.github.io/unifi-os-kubernetes
 helm install unifi unifi-os/unifi-os-server \
   --namespace unifi --create-namespace \
   --set systemIp=unifi.example.com \
@@ -73,7 +77,7 @@ helm install unifi unifi-os/unifi-os-server \
 Or directly from the repo (no chart-releaser needed):
 
 ```bash
-git clone https://github.com/chrissnell/unifi-os-kubernetes
+git clone https://github.com/Jaturu/unifi-os-kubernetes
 helm install unifi ./unifi-os-kubernetes/chart \
   --namespace unifi --create-namespace \
   -f my-values.yaml
@@ -120,7 +124,7 @@ snapshotted, and restored independently:
 | --------- | ------------------------------ | ----------------------------------------------------- |
 | `data`    | `/persistent`, `/data`, `/srv`, `/var/lib/unifi`, `/var/log`, `/etc/rabbitmq/ssl` | UOS app state, configs, logs, RabbitMQ certs |
 | `mongo`   | `/var/lib/mongodb`             | Bundled MongoDB datadir                               |
-| `backups` | `/var/lib/unifi/data/backup`   | Network app autobackups (optional, off by default)    |
+| `backups` | `/var/lib/unifi/backup`        | Network app autobackups (optional, off by default)    |
 
 ### Container requirements
 
@@ -156,6 +160,29 @@ The chart wires all of this for you.
 
 Toggle each via `ports.<name>.enabled` in values.
 
+## Web UI via Gateway API (Envoy Gateway)
+
+On clusters running [Envoy Gateway](https://gateway.envoyproxy.io/) instead
+of an ingress controller, publish the web UI with an `HTTPRoute`:
+
+```yaml
+gateway:
+  enabled: true
+  hostnames:
+    - unifi.example.com
+  parentRefs:
+    - name: my-gateway
+      namespace: envoy-gateway-system
+      sectionName: https
+```
+
+The chart also creates an Envoy Gateway `Backend` that talks HTTPS to UOS
+without verifying its self-signed certificate, so Envoy Gateway must have the
+Backend API enabled (`extensionApis.enableBackend: true`). Client-facing TLS
+comes from the Gateway listener. Device ports (8080, 3478, 10003) are not
+routed through the gateway; expose those with `service.type: LoadBalancer`.
+See [`examples/values-gateway.yaml`](examples/values-gateway.yaml).
+
 ## TLS via cert-manager
 
 If you run cert-manager in your cluster, the chart can issue and rotate the
@@ -174,6 +201,11 @@ certManager:
   dnsNames:
     - unifi.example.com
 ```
+
+The chart sets no ingress class or controller-specific annotations by default:
+the cluster's default IngressClass is used, and because UOS serves HTTPS
+itself you must add your controller's "backend speaks HTTPS" setting under
+`ingress.annotations` (see [`examples/values-ingress.yaml`](examples/values-ingress.yaml)).
 
 The chart creates a `Certificate` whose secret feeds the ingress automatically.
 This controls the secret in front of the ingress only — UniFi's bundled nginx
@@ -199,7 +231,7 @@ Three auth modes:
 |------|-----|-------|
 | API key | `unifiExporter.config.apiKey` | Recommended on UOS 4+. |
 | Username + password | `unifiExporter.config.username` + `password` | Local **Viewer** admin. |
-| Pre-existing Secret | `unifiExporter.existingSecret.name` | Mount creds from ESO/Vault — chart reads `password` and/or `api-key` keys. |
+| Pre-existing Secret | `unifiExporter.existingSecret.name` | Mount creds from ESO/Vault — the `password` key is used when `config.username` is set, otherwise the `api-key` key. |
 
 The exporter URL defaults to the in-cluster webui Service
 (`https://<release>-unifi-os-server-webui.<ns>.svc.cluster.local`); override
@@ -253,7 +285,7 @@ that device.
 
 ## Autobackups
 
-UOS Network app autobackups land in `/var/lib/unifi/data/backup/autobackup/`
+UOS Network app autobackups land in `/var/lib/unifi/backup/autobackup/`
 inside the container. By default that directory is on the `data` PVC, so
 backups persist with the rest of UOS state.
 
@@ -314,7 +346,7 @@ The image bakes in the Network app at the version Ubiquiti ships with
 this UOS Server release. **Don't use the "Update" button in the UI.**
 
 Network app upgrades happen by image bump. We check Ubiquiti daily and
-publish a new [`unifi-os-server`](https://github.com/chrissnell/unifi-os-kubernetes/pkgs/container/unifi-os-server)
+publish a new [`unifi-os-server`](https://github.com/Jaturu/unifi-os-kubernetes/pkgs/container/unifi-os-server)
 image when a new Network app is released. Pull the new image and restart
 the pod.
 

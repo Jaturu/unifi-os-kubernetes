@@ -17,7 +17,7 @@ if [ ! -f "$DATA_DIR/uos_uuid" ]; then
     else
         RAW_UUID=$(cat /proc/sys/kernel/random/uuid)
         # Force the version nibble to 5 so UOS treats the id as a v5 UUID.
-        UOS_UUID=$(echo "$RAW_UUID" | sed 's/./5/15')
+        UOS_UUID="${RAW_UUID:0:14}5${RAW_UUID:15}"
         echo "Generated UOS_UUID=$UOS_UUID"
         printf '%s' "$UOS_UUID" > "$DATA_DIR/uos_uuid"
     fi
@@ -74,9 +74,17 @@ ensure_dir /var/log/rabbitmq  rabbitmq:rabbitmq 755
 # often 0777, which mongod refuses (and on some NFS servers the underlying
 # uid mapping then refuses subsequent lock-file stats). Force-chown and
 # chmod to 0770 so the bundled mongod boots cleanly.
+# Only re-own when the top-level owner is wrong, so a large datadir isn't
+# walked on every boot. Failures stay non-fatal (root-squashed NFS exports
+# reject chown) but are reported, since mongod will otherwise fail later
+# with a much less obvious error.
 mkdir -p /var/lib/mongodb
-chown -R mongodb:mongodb /var/lib/mongodb || true
-chmod 0770 /var/lib/mongodb || true
+if [ "$(stat -c '%U:%G' /var/lib/mongodb)" != "mongodb:mongodb" ]; then
+    chown -R mongodb:mongodb /var/lib/mongodb \
+        || echo "WARNING: could not chown /var/lib/mongodb to mongodb:mongodb; mongod may fail to start" >&2
+fi
+chmod 0770 /var/lib/mongodb \
+    || echo "WARNING: could not chmod /var/lib/mongodb to 0770; mongod may fail to start" >&2
 
 # 6. Synology-specific systemd unit overrides (DSM cgroup quirks).
 SYS_VENDOR="/sys/class/dmi/id/sys_vendor"
@@ -107,14 +115,14 @@ fi
 # These services read their settings from /data/<svc>/ws/config.props and default
 # to logging into per-service files inside the container, which are invisible to
 # standard log aggregation. We append the log-redirect properties idempotently:
-# if the file already has `log.std=true` we leave it alone, so user customizations
-# survive container restarts.
+# if the file already sets `log.std` (to any value) we leave it alone, so user
+# customizations survive container restarts and the block is never appended twice.
 ensure_log_redirect() {
     local cfg="$1"
     local dir
     dir="$(dirname "$cfg")"
     mkdir -p "$dir"
-    if [ -f "$cfg" ] && grep -qE '^[[:space:]]*log\.std[[:space:]]*=[[:space:]]*true' "$cfg"; then
+    if [ -f "$cfg" ] && grep -qE '^[[:space:]]*log\.std[[:space:]]*=' "$cfg"; then
         return 0
     fi
     {
@@ -134,6 +142,12 @@ done
 # 8. Optional: pin system_ip in unifi network properties.
 UNIFI_SYSTEM_PROPERTIES="/var/lib/unifi/system.properties"
 if [ -n "${UOS_SYSTEM_IP:-}" ]; then
+    # The value is spliced into a sed expression and a properties file; only
+    # accept hostname / IPv4 / IPv6 characters.
+    if ! [[ "$UOS_SYSTEM_IP" =~ ^[A-Za-z0-9.:_-]+$ ]]; then
+        echo "Invalid UOS_SYSTEM_IP (expected a hostname or IP address): $UOS_SYSTEM_IP" >&2
+        exit 1
+    fi
     echo "Setting system_ip=$UOS_SYSTEM_IP in $UNIFI_SYSTEM_PROPERTIES"
     mkdir -p "$(dirname "$UNIFI_SYSTEM_PROPERTIES")"
     if [ -f "$UNIFI_SYSTEM_PROPERTIES" ] && grep -q '^system_ip=' "$UNIFI_SYSTEM_PROPERTIES"; then
@@ -142,5 +156,17 @@ if [ -n "${UOS_SYSTEM_IP:-}" ]; then
         echo "system_ip=$UOS_SYSTEM_IP" >> "$UNIFI_SYSTEM_PROPERTIES"
     fi
 fi
+
+# 9. Hand DISCOVERY_SHIM_* overrides to the discovery shim unit. systemd does
+# not pass the container environment on to services, so write the ones that
+# are set to the unit's EnvironmentFile (rewritten each boot, so removing an
+# override takes effect on restart).
+SHIM_ENV_FILE=/etc/default/uos-discovery-shim
+: > "$SHIM_ENV_FILE"
+for var in DISCOVERY_SHIM_NODE DISCOVERY_SHIM_PORT DISCOVERY_SHIM_HOST; do
+    if [ -n "${!var:-}" ]; then
+        printf '%s=%s\n' "$var" "${!var}" >> "$SHIM_ENV_FILE"
+    fi
+done
 
 exec /sbin/init

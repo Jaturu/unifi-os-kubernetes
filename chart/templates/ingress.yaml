@@ -12,14 +12,21 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
   {{- if .Values.ingress.tls.enabled }}
   tls:
     - hosts:
         - {{ .Values.ingress.host | quote }}
-      {{- $secret := include "unifi-os-server.tlsSecretName" . }}
-      {{- if $secret }}
-      secretName: {{ $secret }}
+      {{- /* Only name a Secret that exists or will be issued: an explicit
+             secretName, the chart's Certificate, or cert-manager's
+             ingress-shim annotations. Otherwise omit it so the ingress
+             controller serves its default certificate. */}}
+      {{- $ann := default (dict) .Values.ingress.annotations }}
+      {{- $shim := or (hasKey $ann "cert-manager.io/cluster-issuer") (hasKey $ann "cert-manager.io/issuer") }}
+      {{- if or .Values.ingress.tls.secretName .Values.certManager.enabled $shim }}
+      secretName: {{ include "unifi-os-server.tlsSecretName" . }}
       {{- end }}
   {{- end }}
   rules:

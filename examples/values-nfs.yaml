@@ -1,28 +1,39 @@
-# Example values: home-lab style. NFS-backed PVs with separate backup
-# storage and a MetalLB LoadBalancer.
+# Example values: databases on block storage, autobackups on NFS, and a
+# MetalLB LoadBalancer.
+#
+# The data and mongo volumes hold PostgreSQL and MongoDB, which want block
+# storage; NFS is a poor fit for them. Autobackups are plain files written
+# occasionally, so they go to a NAS export where they survive the cluster.
 
 systemIp: unifi.example.com
 
 service:
   type: LoadBalancer
   loadBalancerIP: 192.0.2.10
-  externalTrafficPolicy: Local
+  # One Service is created per port, all requesting the same IP. MetalLB
+  # only lets them share it when they carry the same sharing key, and
+  # shared-IP services need externalTrafficPolicy: Cluster.
+  annotations:
+    metallb.universe.tf/allow-shared-ip: unifi
+  externalTrafficPolicy: Cluster
 
 persistence:
   data:
     enabled: true
+    storageClass: longhorn
     size: 20Gi
     accessMode: ReadWriteOnce
-    nfs:
-      server: 192.0.2.5
-      path:   /volume1/NFS/unifi-os/data
+    # Most dynamic storage classes delete the volume with its PVC; keep the PVC (and
+    # its data) if the release is uninstalled.
+    annotations:
+      helm.sh/resource-policy: keep
   mongo:
     enabled: true
+    storageClass: longhorn
     size: 10Gi
     accessMode: ReadWriteOnce
-    nfs:
-      server: 192.0.2.5
-      path:   /volume1/NFS/unifi-os/mongo
+    annotations:
+      helm.sh/resource-policy: keep
   backups:
     enabled: true
     size: 50Gi
