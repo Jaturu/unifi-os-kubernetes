@@ -31,6 +31,8 @@ spec:
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -63,7 +65,7 @@ spec:
           ports:
             {{- range $name, $p := .Values.ports }}
             {{- if $p.enabled }}
-            - name: {{ $name | lower | trunc 15 }}
+            - name: {{ include "unifi-os-server.portName" $name }}
               containerPort: {{ $p.targetPort }}
               protocol: {{ $p.protocol }}
             {{- end }}

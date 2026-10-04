@@ -29,7 +29,7 @@ spec:
     {{- $sel | nindent 4 }}
     app.kubernetes.io/component: server
   ports:
-    - name: {{ $name | lower | trunc 15 }}
+    - name: {{ include "unifi-os-server.portName" $name }}
       port: {{ $p.port }}
       targetPort: {{ $p.targetPort }}
       protocol: {{ $p.protocol }}

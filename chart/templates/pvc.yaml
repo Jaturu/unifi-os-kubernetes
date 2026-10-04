@@ -4,7 +4,7 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: {{ include "unifi-os-server.fullname" . }}-data
+  name: {{ include "unifi-os-server.pvName" (list . "data") }}
   labels:
     {{- include "unifi-os-server.labels" . | nindent 4 }}
 spec:
@@ -14,6 +14,9 @@ spec:
     - {{ .Values.persistence.data.accessMode }}
   persistentVolumeReclaimPolicy: Retain
   storageClassName: {{ default "" .Values.persistence.data.storageClass | quote }}
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: {{ include "unifi-os-server.fullname" . }}-data
   nfs:
     server: {{ .Values.persistence.data.nfs.server }}
     path:   {{ .Values.persistence.data.nfs.path }}
@@ -36,7 +39,7 @@ spec:
     requests:
       storage: {{ .Values.persistence.data.size }}
   {{- if .Values.persistence.data.nfs }}
-  volumeName: {{ include "unifi-os-server.fullname" . }}-data
+  volumeName: {{ include "unifi-os-server.pvName" (list . "data") }}
   storageClassName: {{ default "" .Values.persistence.data.storageClass | quote }}
   {{- else if .Values.persistence.data.storageClass }}
   storageClassName: {{ .Values.persistence.data.storageClass | quote }}
@@ -48,7 +51,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: {{ include "unifi-os-server.fullname" . }}-mongo
+  name: {{ include "unifi-os-server.pvName" (list . "mongo") }}
   labels:
     {{- include "unifi-os-server.labels" . | nindent 4 }}
 spec:
@@ -58,6 +61,9 @@ spec:
     - {{ .Values.persistence.mongo.accessMode }}
   persistentVolumeReclaimPolicy: Retain
   storageClassName: {{ default "" .Values.persistence.mongo.storageClass | quote }}
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: {{ include "unifi-os-server.fullname" . }}-mongo
   nfs:
     server: {{ .Values.persistence.mongo.nfs.server }}
     path:   {{ .Values.persistence.mongo.nfs.path }}
@@ -80,7 +86,7 @@ spec:
     requests:
       storage: {{ .Values.persistence.mongo.size }}
   {{- if .Values.persistence.mongo.nfs }}
-  volumeName: {{ include "unifi-os-server.fullname" . }}-mongo
+  volumeName: {{ include "unifi-os-server.pvName" (list . "mongo") }}
   storageClassName: {{ default "" .Values.persistence.mongo.storageClass | quote }}
   {{- else if .Values.persistence.mongo.storageClass }}
   storageClassName: {{ .Values.persistence.mongo.storageClass | quote }}
@@ -92,7 +98,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: {{ include "unifi-os-server.fullname" . }}-backups
+  name: {{ include "unifi-os-server.pvName" (list . "backups") }}
   labels:
     {{- include "unifi-os-server.labels" . | nindent 4 }}
 spec:
@@ -102,6 +108,9 @@ spec:
     - {{ .Values.persistence.backups.accessMode }}
   persistentVolumeReclaimPolicy: Retain
   storageClassName: {{ default "" .Values.persistence.backups.storageClass | quote }}
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: {{ include "unifi-os-server.fullname" . }}-backups
   nfs:
     server: {{ .Values.persistence.backups.nfs.server }}
     path:   {{ .Values.persistence.backups.nfs.path }}
@@ -124,7 +133,7 @@ spec:
     requests:
       storage: {{ .Values.persistence.backups.size }}
   {{- if .Values.persistence.backups.nfs }}
-  volumeName: {{ include "unifi-os-server.fullname" . }}-backups
+  volumeName: {{ include "unifi-os-server.pvName" (list . "backups") }}
   storageClassName: {{ default "" .Values.persistence.backups.storageClass | quote }}
   {{- else if .Values.persistence.backups.storageClass }}
   storageClassName: {{ .Values.persistence.backups.storageClass | quote }}

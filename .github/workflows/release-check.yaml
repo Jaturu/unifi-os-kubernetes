@@ -16,20 +16,38 @@ on:
         type: string
   schedule:
     - cron: "0 6 * * *"
+  # Both bump workflows patch-bump the chart version, so when one bump PR
+  # merges the other open bump PR conflicts on that line. Re-run on every
+  # Chart.yaml change on main: an already-pinned version is a no-op, and a
+  # still-pending bump has its PR branch rebuilt on the new main.
+  push:
+    branches: [main]
+    paths:
+      - 'chart/Chart.yaml'
 
+# One run at a time, so a push-triggered run can't race the daily one while
+# both push images and rebuild the same PR branch.
+concurrency:
+  group: release-check
+  cancel-in-progress: false
+
+# Least privilege: each job below declares only what it needs. The
+# release-check job parses untrusted API data and gets read-only access.
 permissions:
-  contents: write
-  packages: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       UOS_VERSION: ${{ steps.version.outputs.UOS_VERSION }}
       UOS_DOWNLOAD_AMD64: ${{ steps.version.outputs.UOS_DOWNLOAD_AMD64 }}
       UOS_DOWNLOAD_ARM64: ${{ steps.version.outputs.UOS_DOWNLOAD_ARM64 }}
+      UOS_SHA256_AMD64: ${{ steps.version.outputs.UOS_SHA256_AMD64 }}
+      UOS_SHA256_ARM64: ${{ steps.version.outputs.UOS_SHA256_ARM64 }}
       RELEASED: ${{ steps.release.outputs.released }}
     steps:
       - name: Fetch latest release metadata from Ubiquiti
@@ -46,28 +64,51 @@ jobs:
       - name: Extract version and download URLs
         id: version
         run: |
-          if [ "$(jq '._embedded.firmware | length' linux-amd64.json)" -eq 0 ]; then
-            echo "No firmware entries returned by Ubiquiti API" >&2
-            exit 1
-          fi
+          set -euo pipefail
+          for f in linux-amd64.json linux-arm64.json; do
+            if [ "$(jq '._embedded.firmware | length' "$f")" -eq 0 ]; then
+              echo "No firmware entries returned by Ubiquiti API ($f)" >&2
+              exit 1
+            fi
+          done
 
           UOS_VERSION=$(jq -r '._embedded.firmware[0].version // empty' linux-amd64.json | sed 's/^v//')
           UOS_DOWNLOAD_AMD64=$(jq -r '._embedded.firmware[0]._links.data.href // empty' linux-amd64.json)
           UOS_DOWNLOAD_ARM64=$(jq -r '._embedded.firmware[0]._links.data.href // empty' linux-arm64.json)
+          UOS_SHA256_AMD64=$(jq -r '._embedded.firmware[0].sha256_checksum // empty' linux-amd64.json)
+          UOS_SHA256_ARM64=$(jq -r '._embedded.firmware[0].sha256_checksum // empty' linux-arm64.json)
 
-          if [ -z "$UOS_VERSION" ] || [ -z "$UOS_DOWNLOAD_AMD64" ] || [ -z "$UOS_DOWNLOAD_ARM64" ]; then
-            echo "Missing version or download URL in API response" >&2
+          # Everything above is untrusted API data that flows into
+          # $GITHUB_OUTPUT/$GITHUB_ENV, sed expressions, and a root-run
+          # installer download. Validate strictly before writing any of it;
+          # the anchored patterns also rule out embedded newlines.
+          if ! [[ "$UOS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected UOS version from API: $UOS_VERSION"
             exit 1
           fi
+          for url in "$UOS_DOWNLOAD_AMD64" "$UOS_DOWNLOAD_ARM64"; do
+            if ! [[ "$url" =~ ^https://fw-download\.ubnt\.com/[A-Za-z0-9._/-]+$ ]]; then
+              echo "::error::Unexpected installer URL from API: $url"
+              exit 1
+            fi
+          done
+          for sum in "$UOS_SHA256_AMD64" "$UOS_SHA256_ARM64"; do
+            if ! [[ "$sum" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::Missing or malformed sha256_checksum in API response"
+              exit 1
+            fi
+          done
 
           {
             echo "UOS_VERSION=$UOS_VERSION"
             echo "UOS_DOWNLOAD_AMD64=$UOS_DOWNLOAD_AMD64"
             echo "UOS_DOWNLOAD_ARM64=$UOS_DOWNLOAD_ARM64"
+            echo "UOS_SHA256_AMD64=$UOS_SHA256_AMD64"
+            echo "UOS_SHA256_ARM64=$UOS_SHA256_ARM64"
           } | tee -a "$GITHUB_OUTPUT" "$GITHUB_ENV"
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Compare against pinned Dockerfile version
         id: release
@@ -88,20 +129,31 @@ jobs:
   extract-linux-amd64:
     needs: release-check
     if: needs.release-check.outputs.RELEASED == 'false'
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/extract-linux-amd64.yaml
     with:
       UOS_DOWNLOAD: ${{ needs.release-check.outputs.UOS_DOWNLOAD_AMD64 }}
+      UOS_SHA256: ${{ needs.release-check.outputs.UOS_SHA256_AMD64 }}
 
   extract-linux-arm64:
     needs: release-check
     if: needs.release-check.outputs.RELEASED == 'false'
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/extract-linux-arm64.yaml
     with:
       UOS_DOWNLOAD: ${{ needs.release-check.outputs.UOS_DOWNLOAD_ARM64 }}
+      UOS_SHA256: ${{ needs.release-check.outputs.UOS_SHA256_ARM64 }}
 
   build-uosserver:
     needs: [release-check, extract-linux-amd64, extract-linux-arm64]
     if: needs.release-check.outputs.RELEASED == 'false'
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build-uosserver.yaml
     with:
       tag: ${{ needs.extract-linux-amd64.outputs.PODMAN_IMAGE_TAG }}
@@ -111,12 +163,15 @@ jobs:
     if: needs.release-check.outputs.RELEASED == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
     env:
       UOS_VERSION: ${{ needs.release-check.outputs.UOS_VERSION }}
       PODMAN_IMAGE_TAG: ${{ needs.extract-linux-amd64.outputs.PODMAN_IMAGE_TAG }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Bump Dockerfile and Chart for new UOS version
         run: |
@@ -134,7 +189,7 @@ jobs:
           echo "Chart bumped from ${CHART_VERSION} to ${NEW_VERSION}, appVersion ${UOS_VERSION}"
 
       - name: Open pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: bump UniFi OS Server to ${{ env.UOS_VERSION }}"

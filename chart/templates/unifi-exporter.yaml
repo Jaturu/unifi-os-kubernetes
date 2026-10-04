@@ -9,6 +9,9 @@
 {{- $secretName := default (printf "%s-creds" $name) .Values.unifiExporter.existingSecret.name -}}
 {{- $passwordKey := default "password" .Values.unifiExporter.existingSecret.passwordKey -}}
 {{- $apiKeyKey := default "api-key" .Values.unifiExporter.existingSecret.apiKeyKey -}}
+{{- if not (or .Values.unifiExporter.existingSecret.name $cfg.apiKey $cfg.password) }}
+{{- fail "unifiExporter.enabled requires unifiExporter.config.apiKey, config.username + config.password, or existingSecret.name" }}
+{{- end }}
 {{- $componentLabels := dict "app.kubernetes.io/component" "unifi-exporter" -}}
 {{- if $createSecret }}
 ---
@@ -76,6 +79,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

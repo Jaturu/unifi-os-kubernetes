@@ -10,6 +10,10 @@ on:
       UOS_DOWNLOAD:
         required: true
         type: string
+      UOS_SHA256:
+        required: false
+        default: ""
+        type: string
     outputs:
       PODMAN_IMAGE_TAG:
         description: "Tag of the extracted uosserver image"
@@ -19,6 +23,11 @@ on:
       UOS_DOWNLOAD:
         description: "UniFi OS Server installer URL (linux-arm64)"
         required: true
+        type: string
+      UOS_SHA256:
+        description: "Expected SHA-256 of the installer (optional)"
+        required: false
+        default: ""
         type: string
 
 env:
@@ -52,12 +61,34 @@ jobs:
           podman --version
 
       - name: Run UniFi OS Server installer
+        # The URL and checksum originate from Ubiquiti's firmware API, so
+        # treat them as untrusted: pass via env (never interpolate into the
+        # script), allow-list the download host, and verify the checksum
+        # before running the installer as root.
+        env:
+          UOS_DOWNLOAD: ${{ inputs.UOS_DOWNLOAD }}
+          UOS_SHA256: ${{ inputs.UOS_SHA256 }}
         run: |
+          set -euo pipefail
+          if ! [[ "$UOS_DOWNLOAD" =~ ^https://fw-download\.ubnt\.com/[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Refusing installer URL outside fw-download.ubnt.com: $UOS_DOWNLOAD"
+            exit 1
+          fi
+          if [ -n "$UOS_SHA256" ] && ! [[ "$UOS_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Malformed installer SHA-256"
+            exit 1
+          fi
           mkdir -p /home/runner/.config/containers
           chmod 755 /home/runner /home/runner/.config /home/runner/.config/containers
           touch /home/runner/.config/containers/storage.conf
           chmod 755 /home/runner/.config/containers/storage.conf
-          curl -fsSL -o unifi-os-server "${{ inputs.UOS_DOWNLOAD }}"
+          curl -fsSL --proto '=https' --tlsv1.2 -o unifi-os-server "$UOS_DOWNLOAD"
+          if [ -n "$UOS_SHA256" ]; then
+            echo "${UOS_SHA256}  unifi-os-server" | sha256sum -c -
+          else
+            echo "::warning::No SHA-256 supplied; installer checksum not verified"
+            sha256sum unifi-os-server
+          fi
           sudo chmod +x unifi-os-server
           echo "y" | sudo ./unifi-os-server || true
 
@@ -98,7 +129,7 @@ jobs:
 
           COMBINED=$(jq -r '((.Entrypoint // []) + (.Cmd // [])) | join(" ")' /tmp/upstream-config.json)
           case "$COMBINED" in
-            *"/sbin/init"*|*" init"*|"init"|"/sbin/init")
+            *"/sbin/init"|*" init"|"init")
               echo "Upstream boots /sbin/init directly."
               ;;
             *)
@@ -137,13 +168,13 @@ jobs:
           esac
 
       - name: Upload upstream OCI config artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: upstream-config-linux-arm64
           path: /tmp/upstream-config.json
 
       - name: Login to GHCR
-        uses: redhat-actions/podman-login@v1
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
@@ -159,6 +190,13 @@ jobs:
             podman images
             exit 1
           fi
+          # The tag is produced by the installer and flows into sed/Dockerfile
+          # edits downstream; reject anything that isn't a plain tag.
+          if ! [[ "$PODMAN_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}$ ]]; then
+            echo "::error::Unexpected uosserver image tag: $PODMAN_IMAGE_TAG"
+            exit 1
+          fi
+          # Registry refs must be lowercase; the owner login may not be.
           podman push "$PODMAN_IMAGE_ID" \
-            "$REGISTRY/$REPO_OWNER/uosserver:${PODMAN_IMAGE_TAG}-linux-arm64"
+            "$REGISTRY/${REPO_OWNER,,}/uosserver:${PODMAN_IMAGE_TAG}-linux-arm64"
           echo "PODMAN_IMAGE_TAG=$PODMAN_IMAGE_TAG" >> "$GITHUB_OUTPUT"

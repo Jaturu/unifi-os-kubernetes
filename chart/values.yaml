@@ -4,7 +4,7 @@
 # PID 1 and requires a privileged container with cgroup access.
 
 image:
-  repository: ghcr.io/chrissnell/unifi-os-server
+  repository: ghcr.io/jaturu/unifi-os-server
   # If unset, Chart.appVersion is used.
   tag: ""
   # Immutable content digest (sha256:...). When set it takes precedence over
@@ -54,6 +54,15 @@ priorityClassName: ""
 # requires NET_ADMIN/NET_RAW and host cgroup access. Privileged mode is the
 # only reliable way to run it at present.
 podSecurityContext: {}
+
+# UOS never talks to the Kubernetes API, so don't hand a privileged pod a
+# ServiceAccount token.
+automountServiceAccountToken: false
+
+# systemd has to stop MongoDB, PostgreSQL, RabbitMQ and the Java/Go services
+# in order on SIGRTMIN+3. The Kubernetes default of 30s risks a SIGKILL
+# mid-shutdown and unclean databases.
+terminationGracePeriodSeconds: 120
 securityContext:
   privileged: true
   capabilities:
@@ -61,8 +70,8 @@ securityContext:
       - NET_ADMIN
       - NET_RAW
 
-# Data volumes. UOS state is split across several paths; we expose two PVCs
-# so the database can be sized, snapshotted, and restored independently of
+# Data volumes. UOS state is split across several paths; we expose up to
+# three PVCs so the database can be sized, snapshotted, and restored independently of
 # everything else.
 persistence:
   # Main UOS state (config, persistent, /data, /srv, unifi network app, logs,
@@ -110,12 +119,14 @@ persistence:
     #  path: /volume1/NFS/unifi-os/backups
 
 # Required tmpfs mounts. systemd needs writable /run, /tmp, journal, and
-# UniFi's tmp dir. Override sizeLimit if you have unusual workloads.
+# UniFi's tmp dir. These are memory-backed and count against the container
+# memory limit, so each is capped; raise a limit if you see ENOSPC on that
+# path (e.g. /tmp during large backup restores), or set "" for no cap.
 tmpfs:
-  run:        { sizeLimit: "" }
-  runLock:    { sizeLimit: "" }
-  tmp:        { sizeLimit: "" }
-  journal:    { sizeLimit: "" }
+  run:        { sizeLimit: "256Mi" }
+  runLock:    { sizeLimit: "16Mi" }
+  tmp:        { sizeLimit: "1Gi" }
+  journal:    { sizeLimit: "256Mi" }
   unifiTmp:   { sizeLimit: "64Mi" }
 
 # Mount /sys/fs/cgroup from the host so systemd-in-container works. Required
@@ -163,21 +174,44 @@ ports:
   syslog:           { enabled: false, port: 5514,  targetPort: 5514,  protocol: UDP, description: "Syslog" }
 
 # Single ingress for the web UI. UOS terminates TLS itself, so the ingress
-# must speak HTTPS to the backend.
+# must speak HTTPS to the backend. How you tell the controller that is
+# controller-specific (an annotation on most), so no default is set here;
+# see examples/values-ingress.yaml. On clusters with Gateway API, prefer
+# the `gateway` section below.
 ingress:
   enabled: false
-  className: nginx
+  # Empty = use the cluster's default IngressClass.
+  className: ""
   host: unifi.example.com
-  annotations:
-    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+  annotations: {}
   tls:
     enabled: true
-    # Empty = derive name from cert-manager (if enabled) or default to
-    # "<release>-unifi-os-server-tls". Set explicitly to point the ingress
-    # at a Secret you manage out of band.
+    # Empty = "<fullname>-tls" when cert-manager issues it (certManager.enabled
+    # or a cert-manager.io/(cluster-)issuer annotation above); otherwise no
+    # secret is referenced and the ingress controller's default certificate
+    # is served. Set explicitly to point the ingress at a Secret you manage
+    # out of band.
     secretName: ""
   path: /
   pathType: Prefix
+
+# Gateway API alternative to the ingress above, for clusters running Envoy
+# Gateway. Creates an HTTPRoute for the web UI plus an Envoy Gateway Backend
+# that speaks HTTPS to UOS without verifying its self-signed certificate.
+# Requires the Gateway API CRDs and Envoy Gateway with the Backend API
+# enabled (extensionApis.enableBackend: true). TLS for clients is terminated
+# by the Gateway listener you attach to.
+gateway:
+  enabled: false
+  # Required when enabled.
+  hostnames: []
+  # - unifi.example.com
+  # Required when enabled: the Gateway listener(s) to attach to.
+  parentRefs: []
+  # - name: my-gateway
+  #   namespace: envoy-gateway-system
+  #   sectionName: https
+  annotations: {}
 
 # Optional cert-manager Certificate for the ingress TLS secret. When enabled,
 # cert-manager issues and rotates a cert into <fullname>-tls (or
@@ -255,7 +289,8 @@ podLabels: {}
 #        unifiExporter.existingSecret.name: my-secret
 #        unifiExporter.existingSecret.passwordKey: password
 #        unifiExporter.existingSecret.apiKeyKey:   api-key
-#      The api-key field, when non-empty, takes precedence over password.
+#      The password key is used when config.username is set; otherwise
+#      the api-key key is used.
 unifiExporter:
   enabled: false
   image:

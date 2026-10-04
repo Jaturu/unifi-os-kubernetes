@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'chart/**'
+      - 'examples/**'
       - '.github/workflows/chart-lint.yaml'
   push:
     branches: [main]
@@ -17,10 +18,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v3.16.2
 
@@ -43,3 +44,46 @@ jobs:
             --set ports.siteSupervisor.enabled=true \
             --set ports.aqmps.enabled=true \
             > /tmp/render-full.yaml
+
+      - name: Render every optional port and check port names are unique
+        run: |
+          set -euo pipefail
+          ARGS=()
+          for p in $(yq '.ports | keys | .[]' chart/values.yaml); do
+            ARGS+=(--set "ports.${p}.enabled=true")
+          done
+          helm template unifi chart/ "${ARGS[@]}" -s templates/deployment.yaml \
+            > /tmp/render-ports.yaml
+          DUPES=$(yq '.spec.template.spec.containers[0].ports[].name' /tmp/render-ports.yaml | sort | uniq -d)
+          if [ -n "$DUPES" ]; then
+            echo "::error::Duplicate container port names: $DUPES"
+            exit 1
+          fi
+          LONG=$(yq '.spec.template.spec.containers[0].ports[].name' /tmp/render-ports.yaml | awk 'length > 15')
+          if [ -n "$LONG" ]; then
+            echo "::error::Port names over 15 characters: $LONG"
+            exit 1
+          fi
+
+      - name: Render exporter, cert-manager and backups
+        run: |
+          helm template unifi chart/ \
+            --set unifiExporter.enabled=true \
+            --set unifiExporter.config.apiKey=dummy \
+            --set unifiExporter.serviceMonitor.enabled=true \
+            --set ingress.enabled=true \
+            --set certManager.enabled=true \
+            --set certManager.issuerRef.name=test \
+            --set 'certManager.dnsNames={unifi.example.com}' \
+            --set persistence.backups.enabled=true \
+            --set gateway.enabled=true \
+            --set 'gateway.hostnames={unifi.example.com}' \
+            --set 'gateway.parentRefs[0].name=gw' \
+            > /tmp/render-extras.yaml
+
+      - name: Render example values
+        run: |
+          for f in examples/*.yaml; do
+            echo "Rendering $f"
+            helm template unifi chart/ -f "$f" > /dev/null
+          done

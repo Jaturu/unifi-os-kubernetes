@@ -1,0 +1,58 @@
+{{- if .Values.gateway.enabled }}
+{{- if not .Values.ports.webui.enabled }}
+{{- fail "gateway.enabled requires ports.webui.enabled" }}
+{{- end }}
+{{- if not .Values.gateway.parentRefs }}
+{{- fail "gateway.parentRefs is required when gateway.enabled is true" }}
+{{- end }}
+{{- if not .Values.gateway.hostnames }}
+{{- fail "gateway.hostnames is required when gateway.enabled is true" }}
+{{- end }}
+{{- $fullName := include "unifi-os-server.fullname" . -}}
+{{- $svcName := printf "%s-webui" $fullName | trunc 63 | trimSuffix "-" -}}
+{{- $backendName := printf "%s-https" $fullName | trunc 63 | trimSuffix "-" -}}
+---
+# UOS terminates TLS itself with a self-signed certificate it rotates on its
+# own, so the gateway has to speak HTTPS to the backend without verifying it.
+# Gateway API's BackendTLSPolicy can't express "skip verification"; Envoy
+# Gateway's Backend resource can.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: {{ $backendName }}
+  labels:
+    {{- include "unifi-os-server.labels" . | nindent 4 }}
+spec:
+  type: Endpoints
+  endpoints:
+    - fqdn:
+        hostname: {{ printf "%s.%s.svc.cluster.local" $svcName .Release.Namespace }}
+        port: {{ .Values.ports.webui.port }}
+  tls:
+    insecureSkipVerify: true
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "unifi-os-server.labels" . | nindent 4 }}
+  {{- with .Values.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.gateway.parentRefs | nindent 4 }}
+  hostnames:
+    {{- toYaml .Values.gateway.hostnames | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: gateway.envoyproxy.io
+          kind: Backend
+          name: {{ $backendName }}
+{{- end }}

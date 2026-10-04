@@ -44,6 +44,32 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{/*
+Container/Service port name from a `ports` key. Port names are capped at 15
+characters; a plain truncation collapses hotspotRedirect0/1/2 into the same
+name, which the API server rejects. Keep the head and the distinguishing
+tail instead.
+*/}}
+{{- define "unifi-os-server.portName" -}}
+{{- $n := lower . -}}
+{{- if gt (len $n) 15 -}}
+{{- printf "%s%s" (trunc 11 $n) (trunc -4 $n) -}}
+{{- else -}}
+{{- $n -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Name for a chart-created NFS PersistentVolume. PVs are cluster-scoped, so the
+namespace is part of the name: the same release name in two namespaces must
+not collide. Call with (list $ "data").
+*/}}
+{{- define "unifi-os-server.pvName" -}}
+{{- $root := index . 0 -}}
+{{- $prefix := printf "%s-%s" $root.Release.Namespace (include "unifi-os-server.fullname" $root) | trunc 54 | trimSuffix "-" -}}
+{{- printf "%s-%s" $prefix (index . 1) -}}
+{{- end -}}
+
 {{/* Returns the data PVC name (handles existingClaim). */}}
 {{- define "unifi-os-server.dataPVC" -}}
 {{- if .Values.persistence.data.existingClaim -}}

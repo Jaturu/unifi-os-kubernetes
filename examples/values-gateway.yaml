@@ -1,0 +1,19 @@
+# Example values: web UI published through an Envoy Gateway HTTPS listener.
+#
+# Only the web UI goes through the gateway. Devices still need to reach
+# 8080/tcp, 3478/udp and 10003/udp directly, so combine this with a
+# LoadBalancer file, e.g.:
+#
+#   helm install unifi ./chart -n unifi \
+#     -f examples/values-nfs.yaml -f examples/values-gateway.yaml
+
+gateway:
+  enabled: true
+  hostnames:
+    - unifi.example.com
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: my-gateway
+      namespace: envoy-gateway-system
+      sectionName: https

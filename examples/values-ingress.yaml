@@ -1,5 +1,10 @@
 # Example values: cluster with ingress-nginx fronting the web UI, and a
 # few TCP ports exposed through ingress-nginx's TCP services map.
+#
+# Note: the community ingress-nginx controller has been retired and no
+# longer receives security fixes. Use this only on a cluster that still
+# runs it; otherwise see values-gateway.yaml, or set className and the
+# backend-HTTPS annotation for your own controller.
 
 systemIp: unifi.example.com
 

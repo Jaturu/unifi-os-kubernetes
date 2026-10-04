@@ -5,17 +5,17 @@ type: application
 version: 0.2.13
 appVersion: "5.1.42"
 kubeVersion: ">=1.25.0-0"
-home: https://github.com/chrissnell/unifi-os-kubernetes
+home: https://github.com/Jaturu/unifi-os-kubernetes
 sources:
-  - https://github.com/chrissnell/unifi-os-kubernetes
+  - https://github.com/Jaturu/unifi-os-kubernetes
 keywords:
   - unifi
   - ubiquiti
   - networking
   - controller
 maintainers:
-  - name: Chris Snell
-    url: https://github.com/chrissnell
+  - name: Jaturu
+    url: https://github.com/Jaturu
 icon: https://avatars.githubusercontent.com/u/4292837?s=200&v=4
 annotations:
   artifacthub.io/license: MIT

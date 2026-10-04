@@ -11,6 +11,8 @@ StartLimitBurst=5
 Type=simple
 # Launcher resolves the node binary at runtime; UOS does not guarantee it at
 # /usr/bin/node. See discovery-shim-launch.sh (GitHub #10).
+# Written by uos-entrypoint.sh from the container's DISCOVERY_SHIM_* env.
+EnvironmentFile=-/etc/default/uos-discovery-shim
 ExecStart=/usr/local/lib/uos-discovery-shim/launch.sh
 Restart=on-failure
 RestartSec=2s
