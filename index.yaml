@@ -6,6 +6,32 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 5.1.42
+    created: "2026-10-04T12:05:54.072165362Z"
+    description: Self-hosted UniFi OS Server for Kubernetes
+    digest: 9299dbdda7ea0f0cd5e4bda7ecb5536a08ad65f5ee8c85cf2a6c0ebffd412f77
+    home: https://github.com/Jaturu/unifi-os-kubernetes
+    icon: https://avatars.githubusercontent.com/u/4292837?s=200&v=4
+    keywords:
+    - unifi
+    - ubiquiti
+    - networking
+    - controller
+    kubeVersion: '>=1.25.0-0'
+    maintainers:
+    - name: Jaturu
+      url: https://github.com/Jaturu
+    name: unifi-os-server
+    sources:
+    - https://github.com/Jaturu/unifi-os-kubernetes
+    type: application
+    urls:
+    - https://github.com/Jaturu/unifi-os-kubernetes/releases/download/chart-0.2.15/unifi-os-server-0.2.15.tgz
+    version: 0.2.15
+  - annotations:
+      artifacthub.io/category: networking
+      artifacthub.io/license: MIT
+    apiVersion: v2
+    appVersion: 5.1.42
     created: "2026-10-04T11:57:38.481656051Z"
     description: Self-hosted UniFi OS Server for Kubernetes
     digest: 46d5b1c4c647bdb9d7d21bcdb82d3692d72b32c900ff5117b9d3b19925d15e77
@@ -27,4 +53,4 @@ entries:
     urls:
     - https://github.com/Jaturu/unifi-os-kubernetes/releases/download/chart-0.2.14/unifi-os-server-0.2.14.tgz
     version: 0.2.14
-generated: "2026-10-04T11:57:38.481663051Z"
+generated: "2026-10-04T12:05:54.072180381Z"
