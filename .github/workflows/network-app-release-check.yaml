@@ -154,7 +154,7 @@ jobs:
         env:
           UPSTREAM: ${{ steps.discover.outputs.version }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.BUMP_PR_TOKEN }}
           commit-message: "chore: bump Network application to ${{ env.UPSTREAM }}"
           branch: bump/network-app-${{ env.UPSTREAM }}
           base: main
