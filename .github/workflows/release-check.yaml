@@ -191,7 +191,7 @@ jobs:
       - name: Open pull request
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.BUMP_PR_TOKEN }}
           commit-message: "chore: bump UniFi OS Server to ${{ env.UOS_VERSION }}"
           branch: bump/uos-${{ env.UOS_VERSION }}
           base: main
