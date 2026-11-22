@@ -4,6 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "04:57"
+      timezone: America/New_York
     groups:
       actions:
         patterns: ["*"]
