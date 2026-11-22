@@ -15,7 +15,8 @@ on:
         default: "false"
         type: string
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "41 0 * * *"
+      timezone: "America/New_York"
   # Both bump workflows patch-bump the chart version, so when one bump PR
   # merges the other open bump PR conflicts on that line. Re-run on every
   # Chart.yaml change on main: an already-pinned version is a no-op, and a

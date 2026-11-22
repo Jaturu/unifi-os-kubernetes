@@ -19,7 +19,8 @@ on:
     # 15 minutes after the UOS Server release-check so a same-morning UOS
     # Server bump has a chance to settle first (the discovery container
     # uses whatever UOSSERVER_TAG is currently on main).
-    - cron: "15 6 * * *"
+    - cron: "56 0 * * *"
+      timezone: "America/New_York"
   # Both bump workflows patch-bump the chart version, so when one bump PR
   # merges the other open bump PR conflicts on that line. Re-run on every
   # Chart.yaml change on main: an already-pinned version is a no-op, and a
