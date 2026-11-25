@@ -170,6 +170,11 @@ ports:
   # for example to set external-mdns hostnames on just the webui service.
   # `appProtocol` sets the Service port's appProtocol. On webui and networkApp,
   # it makes gateways (e.g. Envoy Gateway) use HTTP/1.1 so websockets work.
+  # `serviceType` overrides `service.type` for that port's service. For
+  # example, `webui.serviceType: ClusterIP` keeps the web UI off the
+  # LoadBalancer when it is published through the gateway or ingress, while
+  # the device ports stay on it. `loadBalancerIP` and `externalTrafficPolicy`
+  # apply only to ports whose resulting type uses them.
   webui:            { enabled: true,  port: 443,   targetPort: 443,   protocol: TCP, appProtocol: kubernetes.io/wss, description: "Web UI / API" }
   communication:    { enabled: true,  port: 8080,  targetPort: 8080,  protocol: TCP, description: "Device communication / inform" }
   stun:             { enabled: true,  port: 3478,  targetPort: 3478,  protocol: UDP, description: "STUN" }
