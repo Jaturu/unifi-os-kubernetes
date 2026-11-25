@@ -135,3 +135,38 @@ jobs:
             exit 1
           fi
           echo "service metadata merge OK"
+
+      - name: Render with a per-port service type
+        # webui stays in-cluster while the device ports use the LoadBalancer,
+        # and the gateway backend and exporter still target the webui service.
+        run: |
+          set -euo pipefail
+          helm template unifi chart/ --namespace unifi \
+            --set service.type=LoadBalancer \
+            --set service.loadBalancerIP=10.0.0.10 \
+            --set ports.webui.serviceType=ClusterIP \
+            --set gateway.enabled=true \
+            --set 'gateway.hostnames={unifi.example.com}' \
+            --set 'gateway.parentRefs[0].name=gw' \
+            --set unifiExporter.enabled=true \
+            --set unifiExporter.config.apiKey=dummy \
+            > /tmp/render-svctype.yaml
+
+          svc() { yq "select(.kind == \"Service\" and .metadata.name == \"$1\") | $2" /tmp/render-svctype.yaml; }
+          check() {
+            [ "$2" = "$3" ] || { echo "::error::$1: got '$2', want '$3'"; exit 1; }
+          }
+          check "webui type" "$(svc unifi-unifi-os-server-webui .spec.type)" ClusterIP
+          check "webui loadBalancerIP" "$(svc unifi-unifi-os-server-webui .spec.loadBalancerIP)" null
+          check "webui externalTrafficPolicy" "$(svc unifi-unifi-os-server-webui .spec.externalTrafficPolicy)" null
+          for p in communication stun discovery; do
+            check "$p type" "$(svc unifi-unifi-os-server-$p .spec.type)" LoadBalancer
+            check "$p loadBalancerIP" "$(svc unifi-unifi-os-server-$p .spec.loadBalancerIP)" 10.0.0.10
+          done
+
+          want=unifi-unifi-os-server-webui.unifi.svc.cluster.local
+          check "gateway backend" \
+            "$(yq 'select(.kind == "Backend") | .spec.endpoints[0].fqdn.hostname' /tmp/render-svctype.yaml)" "$want"
+          check "exporter url" \
+            "$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[].env[] | select(.name == "UP_UNIFI_DEFAULT_URL") | .value' /tmp/render-svctype.yaml)" "https://$want"
+          echo "per-port service type OK"

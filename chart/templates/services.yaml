@@ -15,6 +15,7 @@
 */}}
 {{- $mergedLabels := merge (dict "unifi-os-server.io/port" $name) (fromYaml $labels) (default (dict) $p.labels) (default (dict) $svc.labels) }}
 {{- $mergedAnnotations := merge (dict) (default (dict) $p.annotations) (default (dict) $svc.annotations) }}
+{{- $type := default $svc.type $p.serviceType }}
 ---
 apiVersion: v1
 kind: Service
@@ -27,11 +28,11 @@ metadata:
     {{- toYaml $mergedAnnotations | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ $svc.type }}
-  {{- if and (eq $svc.type "LoadBalancer") $svc.loadBalancerIP }}
+  type: {{ $type }}
+  {{- if and (eq $type "LoadBalancer") $svc.loadBalancerIP }}
   loadBalancerIP: {{ $svc.loadBalancerIP }}
   {{- end }}
-  {{- if and (or (eq $svc.type "LoadBalancer") (eq $svc.type "NodePort")) $svc.externalTrafficPolicy }}
+  {{- if and (or (eq $type "LoadBalancer") (eq $type "NodePort")) $svc.externalTrafficPolicy }}
   externalTrafficPolicy: {{ $svc.externalTrafficPolicy }}
   {{- end }}
   selector:

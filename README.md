@@ -158,7 +158,8 @@ The chart wires all of this for you.
 | 5671  | TCP   | AMQPS                            | optional         |
 | 5514  | UDP   | Syslog                           | optional         |
 
-Toggle each via `ports.<name>.enabled` in values.
+Toggle each via `ports.<name>.enabled` in values. Each port's service takes
+`service.type` unless `ports.<name>.serviceType` overrides it.
 
 ## Web UI via Gateway API (Envoy Gateway)
 
@@ -182,6 +183,22 @@ Backend API enabled (`extensionApis.enableBackend: true`). Client-facing TLS
 comes from the Gateway listener. Device ports (8080, 3478, 10003) are not
 routed through the gateway; expose those with `service.type: LoadBalancer`.
 See [`examples/values-gateway.yaml`](examples/values-gateway.yaml).
+
+With `service.type: LoadBalancer`, the web UI is also reachable on the
+LoadBalancer IP, which bypasses anything the gateway enforces, such as
+authentication. To publish it only through the gateway, keep the web UI
+service in-cluster:
+
+```yaml
+service:
+  type: LoadBalancer
+ports:
+  webui:
+    serviceType: ClusterIP
+```
+
+The HTTPRoute backend and the Prometheus exporter reach the web UI by its
+in-cluster service name, so both keep working.
 
 The Backend pins the upstream connection to HTTP/1.1
 (`gateway.backendAlpnProtocols`). Envoy Gateway 1.6+ otherwise negotiates

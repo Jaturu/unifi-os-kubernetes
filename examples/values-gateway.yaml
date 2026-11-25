@@ -7,6 +7,12 @@
 #   helm install unifi ./chart -n unifi \
 #     -f examples/values-nfs.yaml -f examples/values-gateway.yaml
 
+# Optional: keep the web UI off the LoadBalancer so it is only reachable
+# through the gateway. The device ports keep `service.type`.
+ports:
+  webui:
+    serviceType: ClusterIP
+
 gateway:
   enabled: true
   hostnames:
